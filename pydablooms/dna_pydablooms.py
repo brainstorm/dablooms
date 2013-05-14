@@ -46,20 +46,18 @@ def sliding_window(sequence, winSize, step=1):
     for i in range(0,numOfChunks*step,step):
         yield sequence[i:i+winSize]
 
-i = 1
 with open(reference, 'rb') as fh:
     for _, seq, _ in readfq.readfq(fh):
-        for kmer in sliding_window(seq, kmer_size):
+        for i, kmer in enumerate(sliding_window(seq, kmer_size)):
             bloom.add(kmer, i)
-            i = i + 1
 
-i = 1
+i = 0
 with open(reference, 'rb') as fh:
     for _, seq, _ in readfq.readfq(fh):
         for kmer in sliding_window(seq, kmer_size):
             if i % 5 == 0:
                 bloom.delete(kmer, i)
-                i = i + 1
+            i = i + 1
 
 
 bloom.flush()
@@ -99,7 +97,7 @@ with open(reference) as fh:
 
 del bloom
 
-false_positive_rate = float(false_positives) / (false_positives + true_negatives)
+false_discovery_rate = float(false_positives) / (false_positives + true_positives)
 
 print('''
 Elements Added:   %6d
@@ -110,22 +108,22 @@ True Negatives:   %6d
 False Positives:  %6d
 False Negatives:  %6d
 
-False positive rate: %.4f
+False discovery rate: %.4f
 Total Size: %d KiB''' % (
                          i, i/5,
                          true_positives,
                          true_negatives,
                          false_positives,
                          false_negatives,
-                         false_positive_rate,
+                         false_discovery_rate,
                          os.stat(bloom_fname).st_size / 1024
                         )
 )
 
 if false_negatives > 0:
     print("TEST FAIL (false negatives exist)")
-elif false_positive_rate > error_rate:
-    print("TEST WARN (false positive rate too high)")
+elif false_discovery_rate > error_rate:
+    print("TEST WARN (false discovery rate too high)")
 else:
     print("TEST PASS")
 print("")
