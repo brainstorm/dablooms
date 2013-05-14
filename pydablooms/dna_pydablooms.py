@@ -22,34 +22,44 @@ bloom = pydablooms.Dablooms(capacity=capacity,
                            error_rate=error_rate,
                            filepath=bloom_fname)
 
-def window(seq, n):
-    "Returns a sliding window (of width n) over data from the iterable"
-    "   s -> (s0,s1,...s[n-1]), (s1,s2,...,sn), ...                   "
-    it = iter(seq)
-    result = tuple(islice(it, n))
-    if len(result) == n:
-        yield result
-    for elem in it:
-        result = result[1:] + (elem,)
-        yield result
+# http://scipher.wordpress.com/2010/12/02/simple-sliding-window-iterator-in-python/
+def sliding_window(sequence, winSize, step=1):
+    """Returns a generator that will iterate through
+    the defined chunks of input sequence.  Input sequence
+    must be iterable."""
+ 
+    # Verify the inputs
+    try: it = iter(sequence)
+    except TypeError:
+        raise Exception("**ERROR** sequence must be iterable.")
+    if not ((type(winSize) == type(0)) and (type(step) == type(0))):
+        raise Exception("**ERROR** type(winSize) and type(step) must be int.")
+    if step > winSize:
+        raise Exception("**ERROR** step must not be larger than winSize.")
+    if winSize > len(sequence):
+        raise Exception("**ERROR** winSize must not be larger than sequence length.")
+ 
+    # Pre-compute number of chunks to emit
+    numOfChunks = ((len(sequence)-winSize)/step)+1
+ 
+    # Do the work
+    for i in range(0,numOfChunks*step,step):
+        yield sequence[i:i+winSize]
 
-i = 0
+i = 1
 with open(reference, 'rb') as fh:
-    for name, seq, qual in readfq.readfq(fh):
-        i = 0;
-        while(i <= (len(seq) - kmer_size)):
-            # adding k_mers to a bloom filter with sliding window.
-            for w in window([seq], kmer_size):
-                print w
-            #bloom.add(w, i)
-            #i += 1
+    for _, seq, _ in readfq.readfq(fh):
+        for kmer in sliding_window(seq, kmer_size):
+            bloom.add(kmer, i)
+            i = i + 1
 
-i = 0
+i = 1
 with open(reference, 'rb') as fh:
-    for name, seq, qual in readfq.readfq(fh):
-        if i % 5 == 0:
-            bloom.delete(seq.rstrip(), i)
-        i += 1
+    for _, seq, _ in readfq.readfq(fh):
+        for kmer in sliding_window(seq, kmer_size):
+            if i % 5 == 0:
+                bloom.delete(kmer, i)
+                i = i + 1
 
 
 bloom.flush()
@@ -64,26 +74,28 @@ true_negatives = 0
 false_positives = 0
 false_negatives = 0
 
-with open(fastq) as fh:
-    for name, seq, qual in readfq.readfq(fh):
-        exists = bloom.check(seq.rstrip())
-        contains = seq.rstrip() in bloom
-        assert exists == contains, \
-            "ERROR: %r from 'bloom.check(x)', %i from 'x in bloom'" \
-            % (exists, contains)
-
-        if i % 5 == 0:
-            if exists:
-                false_positives += 1
+i = 0
+with open(reference) as fh:
+    for _, seq, _ in readfq.readfq(fh):
+        for kmer in sliding_window(seq, kmer_size):
+            exists = bloom.check(kmer)
+            contains = kmer in bloom
+            assert exists == contains, \
+                "ERROR: %r from 'bloom.check(x)', %i from 'x in bloom'" \
+                % (exists, contains)
+    
+            if i % 5 == 0:
+                if exists:
+                    false_positives += 1
+                else:
+                    true_negatives += 1
             else:
-                true_negatives += 1
-        else:
-            if exists:
-                true_positives += 1
-            else:
-                false_negatives += 1
-                sys.stderr.write("ERROR: False negative: '%s'\n" % seq.rstrip())
-        i += 1
+                if exists:
+                    true_positives += 1
+                else:
+                    false_negatives += 1
+                    sys.stderr.write("ERROR: False negative: '%s'\n" % seq.rstrip())
+            i += 1
 
 del bloom
 
