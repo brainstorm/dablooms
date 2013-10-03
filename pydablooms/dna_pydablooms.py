@@ -54,11 +54,9 @@ with open(reference, 'rb') as fh:
 i = 0
 with open(reference, 'rb') as fh:
     for _, seq, _ in readfq.readfq(fh):
-        for kmer in sliding_window(seq, kmer_size):
+        for i, kmer in enumerate(sliding_window(seq, kmer_size)):
             if i % 5 == 0:
                 bloom.delete(kmer, i)
-            i = i + 1
-
 
 bloom.flush()
 del bloom
